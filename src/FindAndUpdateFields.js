@@ -12,7 +12,6 @@ const PIPEFY_API_URL = "https://api.pipefy.com/graphql";
  * Essa função não cuida de paginação completa, apenas de uma chamada.
  */
 export async function fetchCardsPageByPhase(phaseId, cursor = null, pageSize = 50) {
-  // Query GraphQL que busca os cards da fase
   const query = `
     query GetPhaseCards($phaseId: ID!, $first: Int!, $after: String) {
       phase(id: $phaseId) {
@@ -36,7 +35,6 @@ export async function fetchCardsPageByPhase(phaseId, cursor = null, pageSize = 5
     }
   `;
 
-  // Variáveis enviadas junto com a query
   const variables = {
     phaseId,
     first: pageSize,
@@ -48,7 +46,6 @@ export async function fetchCardsPageByPhase(phaseId, cursor = null, pageSize = 5
     variables
   };
 
-  // Faz a requisição HTTP usando fetch (Node 18+ já tem fetch nativo)
   const response = await fetch(PIPEFY_API_URL, {
     method: "POST",
     headers: {
@@ -66,7 +63,6 @@ export async function fetchCardsPageByPhase(phaseId, cursor = null, pageSize = 5
 
   const responseBody = await response.json();
 
-  // Caso venha algum erro GraphQL
   if (responseBody.errors && responseBody.errors.length > 0) {
     console.error("Erros retornados pelo Pipefy:", responseBody.errors);
     throw new Error("A API do Pipefy retornou erros na consulta GraphQL.");
@@ -98,41 +94,32 @@ export async function fetchCardsPageByPhase(phaseId, cursor = null, pageSize = 5
  * controlando a paginação internamente.
  */
 export async function getAllCardsFromPhase(phaseId, pageSize = 50) {
-  let allCards = [];          // Armazena todos os cards encontrados
-  let cursor = null;          // Inicializa o cursor (primeira vez será null)
-  let hasNextPage = true;     // Inicia com 'true' porque vamos começar a buscar
-  let pageNumber = 1;         // Para controlar o número da página sendo buscada
+  let allCards = [];
+  let cursor = null;
+  let hasNextPage = true;
+  let pageNumber = 1;
 
   while (hasNextPage) {
-    console.log(`Buscando página ${pageNumber} da fase ${phaseId}...`);
+    console.log(`🔎 Buscando página ${pageNumber} da fase ${phaseId}...`);
 
-    // Chama a função para pegar os cards de uma página
     const {
       cards,
-      hasNextPage: nextPageExists,  // Variável que indica se há mais páginas
-      endCursor                    // Cursor da próxima página
+      hasNextPage: nextPageExists,
+      endCursor
     } = await fetchCardsPageByPhase(phaseId, cursor, pageSize);
 
-    console.log(`Página ${pageNumber} retornou ${cards.length} cards.`);
+    console.log(`📄 Página ${pageNumber} retornou ${cards.length} cards.`);
 
-    // Adiciona os cards da página atual ao array de todos os cards
     allCards = allCards.concat(cards);
 
-    // Atualiza a variável hasNextPage para saber se há mais páginas
     hasNextPage = nextPageExists;
-
-    // Se há mais páginas, atualiza o cursor para a próxima página
     cursor = endCursor;
-
-    // Incrementa o número da página
     pageNumber += 1;
-
-    // Se não houver mais páginas, o loop vai parar automaticamente
   }
 
-  console.log(`Total de cards encontrados na fase ${phaseId}: ${allCards.length}`);
+  console.log(`📊 Total de cards encontrados na fase ${phaseId}: ${allCards.length}`);
   
-  return allCards;  // Retorna todos os cards encontrados
+  return allCards;
 }
 
 /**
@@ -140,62 +127,94 @@ export async function getAllCardsFromPhase(phaseId, pageSize = 50) {
  */
 export async function getAllCardIdsFromPhase(phaseId, pageSize = 50) {
   const allCards = await getAllCardsFromPhase(phaseId, pageSize);
-  return allCards.map((card) => card.id);
+  const ids = allCards.map((card) => card.id);
+
+  console.log(`🧾 IDs coletados (${ids.length}):`, ids);
+
+  return ids;
 }
 
-export async function updateCardPipefy(cardId){
-    const query = 
-        `mutation UpdateCardField($card_id: ID!, $field_id: ID!, $new_value: String!) {
-            updateCardField(
-                input: {
-                card_id: $card_id
-                field_id: $field_id
-                new_value: $new_value
-                }
-            ) {
-                card {
-                id
-                }
-            }
-        }`;
+/**
+ * Atualiza um campo específico de um card no Pipefy.
+ * Aqui usamos interpolação do newValue na query, sem variável GraphQL para evitar o erro de tipo.
+ * ⚠️ IMPORTANTE: não use newValue com aspas duplas sem tratar/escapar.
+ */
+export async function updateCardPipefy(cardId, fieldId, newValue) {
+  console.log(`🔄 Atualizando card ${cardId} (campo ${fieldId} => "${newValue}")...`);
 
-    const variables = {
-        card_id: cardId,
-        field_id: "c_digo_cidade",
-        new_value: "teste"
-    };
+  const query = `
+    mutation UpdateCardField(
+      $card_id: ID!,
+      $field_id: ID!
+    ) {
+      updateCardField(
+        input: {
+          card_id: $card_id
+          field_id: $field_id
+          new_value: "${newValue}"
+        }
+      ) {
+        card {
+          id
+        }
+      }
+    }
+  `;
 
-    const requestBody = {
-        query,
-        variables
-    };
+  const variables = {
+    card_id: cardId,
+    field_id: fieldId
+  };
 
-    const response = await fetch(PIPEFY_API_URL, {
-        method: "POST",
-        headers: {
-            "Content-Type" : "application/json",
-            Authorization: `Bearer ${pipefyToken}`
+  const requestBody = {
+    query,
+    variables
+  };
+
+  const response = await fetch(PIPEFY_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type" : "application/json",
+      Authorization: `Bearer ${pipefyToken}`
         },
-        body: JSON.stringify(requestBody)
-    })
+    body: JSON.stringify(requestBody)
+  });
 
-    const responseBody = await response.json();
+  const responseBody = await response.json();
 
-    if (!response.ok || responseBody.errors) {
-        console.error("Erro ao atualizar card:", responseBody.errors);
-        throw new Error("Erro ao atualizar card no Pipefy.");
-    }
+  if (!response.ok || responseBody.errors) {
+    console.error(`❌ Erro ao atualizar card ${cardId}:`, responseBody.errors);
+    throw new Error(`Erro ao atualizar card ${cardId} no Pipefy.`);
+  }
 
-    return responseBody.data.updateCardField.card.id;
+  console.log(`✅ Card ${cardId} atualizado com sucesso.`);
+
+  return responseBody.data.updateCardField.card.id;
 }
 
-export async function updateFieldByCard(phaseId, pageSize = 50){
-    // allCardsIds recebe todos os IDs dos cards em um array
-    const allCardsId = await getAllCardIdsFromPhase(phaseId, pageSize = 50);
+/**
+ * Atualiza um campo em TODOS os cards de uma fase.
+ */
+export async function updateFieldByCard(
+  phaseId,
+  pageSize = 50,
+  fieldId,
+  newValue
+) {
+  console.log(`📦 Buscando IDs de todos os cards da fase ${phaseId}...`);
 
-    for(const cardId of allCardsId){
-        await updateCardPipefy(cardId);
-    }
+  const allCardIds = await getAllCardIdsFromPhase(phaseId, pageSize);
 
-    console.log("✅ Todos os cards foram atualizados.")
+  console.log(`🚚 Iniciando atualização em ${allCardIds.length} cards...`);
+
+  let index = 0;
+  const total = allCardIds.length;
+
+  for (const cardId of allCardIds) {
+    index += 1;
+    console.log(`➡️ [${index}/${total}] Atualizando card ${cardId}...`);
+    await updateCardPipefy(cardId, fieldId, newValue);
+  }
+
+  console.log("🎉 Todos os cards foram atualizados com sucesso.");
 }
