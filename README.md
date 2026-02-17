@@ -59,7 +59,7 @@ Este script automatiza toda a operação:
 ├── src
 │   └── FindAndUpdateFields.js # Lógica de busca, paginação e atualização
 ├── index.js                   # Entrypoint principal
-├── .env                       # Contém o TOKEN_PIPEFY (não versionar)
+├── .env                       # Contém o TOKEN_PIPEFY
 ├── package.json
 └── package-lock.json
 ```
